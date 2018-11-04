@@ -1,13 +1,233 @@
-#
-# Executes commands at the start of an interactive session.
-#
-# Authors:
-#   Sorin Ionescu <sorin.ionescu@gmail.com>
-#
+#!/bin/zsh
+
+#---- base
+
+export CURRENT_OS=$(uname)
+export PATH=$HOME/bin:$PATH
+export EDITOR='vim'
+
+ulimit -n 1000
+
+alias zshrc='source ~/.zshrc'
+
+
+#---- plugins
+
+autoload -U compinit; compinit
 
 # Source Prezto.
 if [[ -s "${ZDOTDIR:-$HOME}/.zprezto/init.zsh" ]]; then
   source "${ZDOTDIR:-$HOME}/.zprezto/init.zsh"
 fi
 
-# Customize to your needs...
+# autojump
+#setopt auto_cd
+#setopt extended_glob
+# [[ -s ~/.autojump/etc/profile.d/autojump.zsh ]] && source ~/.autojump/etc/profile.d/autojump.zsh
+# setopt nolistambiguous
+
+# - - -
+
+# https://busy.org/@demwunz/how-to-get-a-customised-and-pretty-zsh-terminal-on-mac-osx
+
+#---- zsh global alias expansion
+# ref: http://blog.patshead.com/2012/11/automatically-expaning-zsh-global-aliases---simplified.html
+
+globalias() {
+   if [[ $LBUFFER =~ '[A-Z0-9]+$' ]]; then
+     zle _expand_alias
+   fi
+   zle self-insert
+}
+
+zle -N globalias
+
+bindkey " " globalias
+bindkey "^ " magic-space
+bindkey -M isearch " " magic-space
+
+#---- iterm
+
+# https://coderwall.com/p/a8uxma/zsh-iterm2-osx-shortcuts
+# ⌘ + ← or → - move one word backward/forward
+bindkey "^[a" backward-word
+bindkey "^[e" forward-word
+
+# Other shortcuts
+# - http://www.geekmind.net/2011/01/shortcuts-to-improve-your-bash-zsh.html
+
+#---- ubuntu
+
+#~/.solarized/gnome-terminal-colors-solarized/set_light.sh
+#~/.solarized/gnome-terminal-colors-solarized/set_dark.sh
+
+#---- dev
+
+# export TOOLS=$HOME/tools
+
+export LC_ALL="en_US.UTF-8"
+export LANG="en_US.UTF-8"
+
+#---- go
+
+# export PATH=/usr/local/go/bin:$PATH
+
+#---- node
+
+# installed in .zsh/completion: https://github.com/felixr/docker-zsh-completion
+
+export PATH=./node_modules/.bin:$PATH:$HOME/.npm/bin
+
+export NVM_DIR="/Users/bkaplan/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"  # This loads nvm
+
+export NVM_SYMLINK_CURRENT=true
+
+#---- java
+
+#if [[ ${CURRENT_OS} == "Linux" ]]; then
+#  export JAVA_HOME=/usr/lib/jvm/java-7-oracle
+#  alias idea=${TOOLS}/idea/current/bin/idea.sh
+#elif [[ ${CURRENT_OS} == "Darwin" ]]; then
+#  export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home
+#fi
+#
+#alias yourkit=${TOOLS}/yourkit/yjp
+
+#---- groovy
+
+export GROOVY_HOME=/usr/local/opt/groovy/libexec
+
+#---- k8
+
+alias k=kubectl
+
+function k-dashboard-token {
+  kubectl -n kube-system describe secret $(kubectl -n kube-system get secret | awk '/^deployment-controller-token-/{print $1}') | awk '$1=="token:"{print $2}'
+}
+
+if [ $commands[kubectl] ]; then
+  source <(kubectl completion zsh)
+  source <(helm completion zsh)
+fi
+
+#---- docker
+
+function docker-get-ip {
+  [ -n $1 ] && docker inspect --format "{{ .NetworkSettings.IPAddress }}" $1
+}
+
+function docker-get-id {
+  [ -n $1 ] && docker inspect --format "{{ .ID }}" $1
+}
+
+function docker-get-image {
+  [ -n $1 ] && docker inspect --format "{{ .Image }}" $1
+}
+
+function docker-get-state {
+  [ -n $1 ] && docker inspect --format "{{ .State.Running }}" $1
+}
+
+function docker-rmi-dangling {
+  docker images -q --filter "dangling=true" | xargs -r docker rmi -f
+}
+
+function docker-remove-untagged-images {
+  docker rmi $(docker images -q --filter "dangling=true")
+}
+
+function docker-remove-all-containers {
+  docker rm -f $(docker ps -a -q)
+}
+
+function docker-remove-stopped-containers {
+  docker rm -v $(docker ps -a -q -f status=exited)
+}
+
+function docker-remove-dangling-images {
+ docker rmi $(docker images -q -f dangling=true)
+}
+
+function docker-volume-cleanup {
+  docker run -v /var/run/docker.sock:/var/run/docker.sock -v /var/lib/docker:/var/lib/docker --rm martin/docker-cleanup-volumes
+}
+
+#---- ssh
+
+if [[ ${CURRENT_OS} == "Darwin" ]]; then
+  SSHPID=`ps ax|grep -c "[s]sh-agent"`
+  if (( $SSHPID == 0 )); then
+    rm -f $HOME/.ssh-env
+    ssh-agent > $HOME/.ssh-env
+    source $HOME/.ssh-env
+    ssh-add $HOME/.ssh/hoth_dsa
+  else
+    source $HOME/.ssh-env
+  fi
+fi
+
+source $HOME/bin/tmuxinator-completion.zsh
+
+# $1 host
+# $2 tmux_name?
+#
+function rtmux {
+  case "$2" in
+	"") autossh -M 0 $1 -t "if tmux -qu has;       then tmux -qu attach;       else EDITOR=vim tmux -qu new;   fi";;
+	*)  autossh -M 0 $1 -t "if tmux -qu has -t $2; then tmux -qu attach -t $2; else EDITOR=vim tmux new -s $2; fi";;
+  esac
+}
+
+#---- aws/ec2
+
+source $HOME/.aws/env.zsh
+#source /usr/local/bin/aws_zsh_completer.sh
+
+#---- network commands
+# sudo netstat -ntlp | grep LISTEN
+
+#---- ansible
+
+#export PYTHONPATH=/Users/bkaplan/si/ansible/lib:/usr/local/lib/python2.7/site-packages
+#export PYTHONPATH=/usr/local/lib/python2.7/site-packages
+
+export ANSIBLE_VAULT_PASSWORD_FILE=$HOME/.ansible/vault-password
+export ANSIBLE_HOST_KEY_CHECKING=False
+export ANSIBLE_SSH_ARGS
+export PYTHONHTTPSVERIFY=0
+
+ansible-refresh-inventory() { ./inventory/aws/$@/ec2.py --refresh-cache }
+ansible-requirements() { ansible-galaxy install --ignore-errors -r requirements.yml }
+
+# for https://github.com/ansible/ansible/issues/31869#issuecomment-337769174, https://github.com/jhaals/ansible-vault/issues/60
+export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+
+function ansible-vault-decrypt-tree {
+  for vf in $(find . -type f -name "vault*.yml"); do
+    echo "Decrpyting ${vf}: $(ansible-vault decrypt ${vf})"
+  done
+}
+
+function ansible-vault-encrypt-tree {
+  for vf in $(find . -type f -name "vault*.yml"); do
+    echo "Encrypting ${vf}: $(ansible-vault encrypt ${vf})"
+  done
+}
+
+alias ap='ansible-playbook'
+
+alias -g iP='-i inventory/aws/production'
+alias -g iG='-i inventory/aws/ge'
+alias -g iS='-i inventory/aws/staging'
+alias -g iO='-i inventory/aws/ops'
+
+alias -g pP='playbooks/hosts/aws'
+alias -g pC='playbooks/hosts/configure'
+alias -g pD='playbooks/deploy'
+alias -g pA='playbooks/admin'
+alias -g pT='playbooks/tenant'
+
+alias -g cA='-a "/bin/bash -c ''''"'
+
+#source ~/si/thirdparty/ansible/hacking/env-setup
