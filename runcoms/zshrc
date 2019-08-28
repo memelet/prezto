@@ -9,7 +9,7 @@ export EDITOR='vim'
 ulimit -n 1000
 
 alias zshrc='source ~/.zshrc'
-
+alias zshenv='source ~/.zshenv'
 
 #---- plugins
 
@@ -46,6 +46,46 @@ bindkey " " globalias
 bindkey "^ " magic-space
 bindkey -M isearch " " magic-space
 
+function loadenv() { export $(grep -v '^#' .env | xargs) }
+
+alias w='watch -x zsh -c'
+
+#---- ---- ----
+
+#---- git
+
+alias git-list-merged="git branch -r --merged | grep -v master | sed 's/origin\///'"
+alias git-delete-merged="git branch -r --merged | grep -v master | sed 's/origin\///' | xargs -n 1 git push --delete origin"
+
+#---- dev
+
+# export TOOLS=$HOME/tools
+
+export LC_ALL="en_US.UTF-8"
+export LANG="en_US.UTF-8"
+
+#---- python
+
+#export PATH=~/.local/bin:$PATH
+
+#---- go
+
+# export PATH=/usr/local/go/bin:$PATH
+
+#---- node
+
+# installed in .zsh/completion: https://github.com/felixr/docker-zsh-completion
+
+#export PATH=./node_modules/.bin:$PATH:$HOME/.npm/bin
+
+export NVM_DIR="/Users/bkaplan/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"  # This loads nvm
+
+export NVM_SYMLINK_CURRENT=true
+
+export CPPFLAGS=-I/usr/local/opt/openssl/include
+export LDFLAGS=-L/usr/local/opt/openssl/lib
+
 #---- iterm
 
 # https://coderwall.com/p/a8uxma/zsh-iterm2-osx-shortcuts
@@ -60,28 +100,6 @@ bindkey "^[e" forward-word
 
 #~/.solarized/gnome-terminal-colors-solarized/set_light.sh
 #~/.solarized/gnome-terminal-colors-solarized/set_dark.sh
-
-#---- dev
-
-# export TOOLS=$HOME/tools
-
-export LC_ALL="en_US.UTF-8"
-export LANG="en_US.UTF-8"
-
-#---- go
-
-# export PATH=/usr/local/go/bin:$PATH
-
-#---- node
-
-# installed in .zsh/completion: https://github.com/felixr/docker-zsh-completion
-
-export PATH=./node_modules/.bin:$PATH:$HOME/.npm/bin
-
-export NVM_DIR="/Users/bkaplan/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"  # This loads nvm
-
-export NVM_SYMLINK_CURRENT=true
 
 #---- java
 
@@ -100,7 +118,13 @@ export GROOVY_HOME=/usr/local/opt/groovy/libexec
 
 #---- k8
 
-alias k=kubectl
+alias k='kubectl'
+alias kg='kubectl get'
+alias kl='kubectl logs '
+alias kx='kubectl exec -i -t'
+alias kc='kubectx'
+alias kgall='kubectl get all'
+alias h=helm
 
 function k-dashboard-token {
   kubectl -n kube-system describe secret $(kubectl -n kube-system get secret | awk '/^deployment-controller-token-/{print $1}') | awk '$1=="token:"{print $2}'
@@ -110,6 +134,16 @@ if [ $commands[kubectl] ]; then
   source <(kubectl completion zsh)
   source <(helm completion zsh)
 fi
+
+export HELM_HOST=localhost:44134
+export TILLER_NAMESPACE=tiller
+
+function tiller-local {
+  echo "Starting tiller for kubectl context: $(kubectl config current-context)"
+  tiller -listen=${HELM_HOST} -storage=secret -logtostderr
+}
+
+export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
 
 #---- docker
 
@@ -189,6 +223,9 @@ source $HOME/.aws/env.zsh
 
 #---- ansible
 
+ansible-venv-27() { source ~/.venv/ansible-2.7/bin/activate }
+ansible-venv-28() { source ~/.venv/ansible-2.8/bin/activate }
+
 #export PYTHONPATH=/Users/bkaplan/si/ansible/lib:/usr/local/lib/python2.7/site-packages
 #export PYTHONPATH=/usr/local/lib/python2.7/site-packages
 
@@ -215,9 +252,12 @@ function ansible-vault-encrypt-tree {
   done
 }
 
-alias ap='ansible-playbook'
+# https://github.com/octplane/ansible_stdout_compact_logger
+alias ap='ANSIBLE_STDOUT_CALLBACK=anstomlog ansible-playbook'
+alias _ap='ansible-playbook'
 
 alias -g iP='-i inventory/aws/production'
+alias -g iA='-i inventory/aws/ather'
 alias -g iG='-i inventory/aws/ge'
 alias -g iS='-i inventory/aws/staging'
 alias -g iO='-i inventory/aws/ops'
@@ -228,6 +268,40 @@ alias -g pD='playbooks/deploy'
 alias -g pA='playbooks/admin'
 alias -g pT='playbooks/tenant'
 
+alias -g stb='--skip-tags base'
+
 alias -g cA='-a "/bin/bash -c ''''"'
 
 #source ~/si/thirdparty/ansible/hacking/env-setup
+
+#---- elasticsearch
+
+# see ~/.zprezto/runcoms/zshenv
+
+#---- ---- ----
+
+# uri encoding, from https://stackoverflow.com/a/10660730/3549299
+
+urlencode() {
+  local string="${1}"
+  local strlen=${#string}
+  local encoded=""
+  local pos c o
+
+  for (( pos=0 ; pos<strlen ; pos++ )); do
+     c=${string:$pos:1}
+     case "$c" in
+        [-_.~a-zA-Z0-9] ) o="${c}" ;;
+        * )               printf -v o '%%%02x' "'$c"
+     esac
+     encoded+="${o}"
+  done
+  echo "${encoded}"    # You can either set a return variable (FASTER)
+  REPLY="${encoded}"   #+or echo the result (EASIER)... or both... :p
+}
+
+urldecode() {
+  printf -v REPLY '%b' "${1//%/\\x}" # You can either set a return variable (FASTER)
+  echo "${REPLY}"  #+or echo the result (EASIER)... or both... :p
+}
+

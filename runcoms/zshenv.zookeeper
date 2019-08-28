@@ -1,0 +1,15 @@
+#!/usr/bin/env zsh
+
+#export ZOO_HOST=10.0.16.96
+export ZOO_HOST=localhost
+alias zoo-ruok='echo "ruok" | nc ${ZOO_HOST} 2181'
+alias zoo-srvr='echo "srvr" | nc ${ZOO_HOST} 2181'
+alias zoo-mntr='echo "mntr" | nc ${ZOO_HOST} 2181'
+alias zoo-stat='echo "stat" | nc ${ZOO_HOST} 2181'
+alias zoo-cons='echo "cons" | nc ${ZOO_HOST} 2181'
+
+function zoo-check() {
+  echo "$1" | nc ${ZOO_HOST} 2181
+}
+
+# wchs, stat, stmk, conf, ruok, mntr, srvr, envi, srst, isro, dump, gtmk, crst, cons
