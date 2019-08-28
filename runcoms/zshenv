@@ -1,3 +1,5 @@
+#!/usr/bin/env zsh
+
 #
 # Defines environment variables.
 #
@@ -9,3 +11,10 @@
 if [[ ( "$SHLVL" -eq 1 && ! -o LOGIN ) && -s "${ZDOTDIR:-$HOME}/.zprofile" ]]; then
   source "${ZDOTDIR:-$HOME}/.zprofile"
 fi
+
+#---- ---- ----
+
+source ~/.zprezto/runcoms/zshenv.elasticsearch
+source ~/.zprezto/runcoms/zshenv.logstash
+source ~/.zprezto/runcoms/zshenv.nomad
+source ~/.zprezto/runcoms/zshenv.zookeeper

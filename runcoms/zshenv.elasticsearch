@@ -1,0 +1,360 @@
+#!/usr/bin/env zsh
+
+#export ES_MASTER=p-ingest-elasticsearch-master-1.use1.systeminsights.com:9200
+#export ES_MASTER=s-elasticsearch-1.use1.systeminsights.com:9200
+export ES_MASTER=ops-elk-3.use1.systeminsights.com:9200
+#es_creds=""
+es_creds="--user 'elastic:41B!uN2sYmRg3D%6kLW26#1Q'"
+
+function es-curl() {
+  args=$*
+  if [[ -z ${es_creds} ]]; then
+    curl --silent ${(z)args}
+  else
+    curl --user 'elastic:41B!uN2sYmRg3D%6kLW26#1Q' --silent ${(z)args}
+  fi
+}
+
+# cat
+
+function es-cat() { es-curl ${ES_MASTER}/_cat/$1 }
+
+function es-cat-master() { es-cat "master?v" }
+function es-cat-recovery() { es-cat "recovery?v" }
+function es-cat-health() { es-cat "health?v" }
+function es-cat-shards() { es-cat "shards?v" }
+function es-cat-indices() { es-cat "indices?v&bytes=gb" }
+function es-cat-aliases() { es-cat "aliases?v" }
+
+#export -f es-cat-health
+
+function es-cat-nodes() {
+  if [[ "$1" == "details" ]]; then
+    headers="h=ip,node.role,master,disk.avail,disk.used,disk.used_percent,disk.total,file_desc.current,heap.percent,heap.current,heap.max,cpu,load_1m,load_15m,version,name"
+  else
+    headers="h=ip,node.role,master,version,name"
+  fi
+  sorting="s=name"
+  es-cat "nodes?v&${headers}&${sorting}"
+}
+
+function es-cat-nodeattrs() {
+  headers="h=ip,name,attr,value"
+  sorting="s=name"
+  es-cat "nodeattrs?v&${headers}&${sorting}"
+}
+
+function es-cat-nodeattrs--node_class() {
+  es-cat-nodeattrs | grep 'node_class'
+}
+
+# allocations
+
+function es-allocation-explain-any() {
+  es-curl -X GET "${ES_MASTER}/_cluster/allocation/explain?pretty=true&useAnyUnassignedShard=true"
+}
+
+function es-allocation-explain() {
+  if [[ "$1" == "" ]]; then
+    es-curl -X GET "${ES_MASTER}/_cluster/allocation/explain?pretty=true"
+  else
+    es-curl -X GET "${ES_MASTER}/_cluster/allocation/explain?pretty=true" \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "index": "'$1'",
+      "shard": 0,
+      "primary": true
+    }'
+  fi
+}
+
+# cluster
+
+function es-cluster-settings() {
+  es-curl -X GET "${ES_MASTER}/_cluster/settings?pretty=true"
+}
+
+function es-cluster-settings-defaults() {
+  es-curl -X GET "${ES_MASTER}/_cluster/settings?pretty=true&include_defaults=true"
+}
+
+function es-cluster-settings-put() {
+  if [[ -z "$1" ]]; then
+    echo "ERROR: Must specify \$1 'transient' or 'persistent'"
+    return
+  fi
+  scope=$1
+
+  if [[ -z "$2" ]]; then
+    echo "ERROR: Must specify \$2 setting key"
+    return
+  fi
+  setting_key=$2
+
+  if [[ -z "$3" ]]; then
+    echo "ERROR: Must specify \$3 setting value"
+    return
+  fi
+  if [[ "$3" == "null" ]]; then
+    setting_value='null'
+  else
+    setting_value='"'$3'"'
+  fi
+
+  settings='{
+    "'${scope}'" :{
+      "'${setting_key}'" : '${setting_value}'
+    }
+  }'
+  echo "settings => ${settings}"
+
+  es-curl -X PUT "${ES_MASTER}/_cluster/settings" \
+  -H 'Content-Type: application/json' \
+  -d ${settings}
+}
+
+function es-cluster-settings-put--routing-allocation() {
+  es-cluster-settings-put "transient" "cluster.routing.allocation.enable" $1
+}
+
+function es-cluster-settings-put--concurrent-rebalance() {
+  es-cluster-settings-put "transient" "cluster.routing.allocation.cluster_concurrent_rebalance" $1
+}
+
+function es-cluster-settings-put--allocation-exclude-name() {
+  es-cluster-settings-put "transient" "cluster.routing.allocation.exclude._name" $1
+}
+
+# indices
+
+function es-index-settings() {
+  if [[ -z "$1" ]]; then
+    index_pattern="_all"
+  else
+    index_pattern=$1
+  fi
+
+  if [[ -z "$2" ]]; then
+    settings_pattern='**'
+  else
+    settings_pattern=$2
+  fi
+
+  if [[ "$3" == "defaults" ]]; then
+    defaults='true'
+  else
+    defaults='false'
+  fi
+
+  es-curl -X GET "${ES_MASTER}/${index_pattern}/_settings?pretty=true&include_defaults=${defaults}&filter_path=${settings_pattern}"
+}
+
+function es-index-settings--routing() {
+  es-index-settings "$1" "routing.allocation.*"
+}
+
+function es-index-settings--routing-none() {
+  es-index-settings "$1" '**' | jq -r 'to_entries[] | select(.value.settings.index | has("routing") | not) | .key'
+}
+
+function es-index-settings--routing-tsv() {
+  es-index-settings--routing | jq -r '
+    to_entries[] | [(.value.settings.index.routing.allocation.include.node_class | tostring), (.value.settings.index.routing.allocation.exclude.node_class | tostring), .key] | @tsv
+  '
+}
+
+function es-index-settings--num-replicas-tsv() {
+  es-index-settings  "$1" "**.number_of_replicas" | jq -r '
+    to_entries[] | [(.value.settings.index.number_of_replicas | tostring), .key] | @tsv
+  '
+}
+
+function es-index-settings--num-shards-tsv() {
+  es-index-settings  "$1" "**.number_of_shards" | jq -r '
+    to_entries[] | [(.value.settings.index.number_of_shards | tostring), .key] | @tsv
+  '
+}
+
+
+function es-index-settings-put() {
+  if [[ -z "$1" ]]; then
+    echo "ERROR: Must specify \$1 index pattern"
+    return
+  fi
+  pattern=$1
+
+  if [[ -z "$2" ]]; then
+    echo "ERROR: Must specify \$2 setting key"
+    return
+  fi
+  setting_key=$2
+
+  if [[ -z "$3" ]]; then
+    echo "ERROR: Must specify \$3 setting value"
+    return
+  fi
+  if [[ "$3" == "null" ]]; then
+    setting_value='null'
+  else
+    setting_value='"'$3'"'
+  fi
+
+  settings='{
+    "index" :{
+    "'${setting_key}'" : '${setting_value}'
+     }
+  }'
+  echo "settings => ${settings}"
+
+  es-curl -X PUT "${ES_MASTER}/${pattern}/_settings" \
+  -H "'Content-Type: application/json'" \
+  -d "'${settings}'"
+}
+
+function es-index-settings-put--allocation-include-node_class() {
+  es-index-settings-put $1 "routing.allocation.include.node_class" $2
+}
+
+function es-index-settings-put--num-replicas() {
+  es-index-settings-put $1 "number_of_replicas" $2
+}
+
+function es-relocating() {
+  es-cat-health
+  echo "\n"
+  es-cat-shards | awk 'NR==1 || /RELOCATING/'
+}
+
+# aliases
+
+function es-alias() {
+  if [[ -z "$1" ]]; then
+    index_pattern=""
+  else
+    index_pattern="/$1"
+  fi
+
+  es-curl -X GET "${ES_MASTER}/_alias${index_pattern}?pretty=true"
+}
+
+
+# templates
+
+function es-index-templates() {
+  if [[ -z "$1" ]]; then
+    template_pattern=""
+  else
+    template_pattern="$1/"
+  fi
+
+  if [[ -z "$2" ]]; then
+    settings_pattern='**'
+  else
+    settings_pattern=$2
+  fi
+
+  es-curl -X GET "${ES_MASTER}/_template/${template_pattern}?pretty=true&filter_path=${settings_pattern}"
+}
+
+function es-index-templates--num-shards-tsv() {
+  es-index-templates  "$1" "**.number_of_shards" | jq -r '
+    to_entries[] | [(.value.settings.index.number_of_shards | tostring), .key] | @tsv
+  '
+}
+
+# tasks
+
+function es-tasks-completed() {
+  es-curl -X GET "${ES_MASTER}/.tasks/_search?size=1000" \
+  -H 'Content-Type: application/json' \
+  -d '
+    {
+      "query" : {
+        "match": {
+          "completed": true
+        }
+      }
+    }'
+}
+
+function es-tasks-completed-ids() {
+  es-tasks-completed | jq -r .hits.hits[]._id
+}
+
+function es-tasks-completed-delete() {
+  for i in $(es-tasks-completed | jq -r .hits.hits[]._id); do
+    es-curl -X DELETE "${ES_MASTER}/.tasks/task/${i}" | jq .
+  done
+}
+
+
+function es-tasks-reindex() {
+  es-curl -X GET "${ES_MASTER}/_tasks?detailed=true&actions=*reindex"
+}
+
+function es-tasks-reindex-status() {
+  es-tasks-reindex | jq '.nodes[].tasks | to_entries[] | {id: .key, total: .value.status.total, created: .value.status.created, remaining: (.value.status.created/.value.status.total*100 | round), desc: .value.description}'
+#  es-tasks-reindex | jq '.nodes[].tasks | to_entries[] | [.key, .value.status.total, .value.status.created, (.value.status.created/.value.status.total*100 | round), .value.description] | @tsv'
+}
+
+function es-tasks-reindex-cancel() {
+  for i in $(es-tasks-completed | jq -r .hits.hits[]._id); do
+    es-curl -X DELETE "${ES_MASTER}/.tasks/task/${i}" | jq .
+  done
+  POST _tasks/r1A2WoRbTwKZ516z6NEs5A:36619/_cancel
+
+}
+# working commands
+
+# es-cat-shards | grep 'data-[1-3]$' | wc -l
+# es-cat-shards | awk 'NR==1 || /data-warm-8$/'
+# es-cat-nodes | awk 'NR==1 || /data-[1-3]$|data-hot-[1-6]$/'
+# es-cat-health; echo "\n"; es-cat-shards | grep RELOCATING
+
+# es-cat-indices | awk 'NR==1; NR>1 {print $0 | "sort -r -n -k10"}'  | head -n 15
+# es-cat-indices | awk 'NR==1; NR>1 && /mtconnectdataitems/ {print $0 | "sort -r -n -k10"}'  | head -n 20
+
+function _es-set-cluster-settings() {
+  es-curl -X PUT "${ES_MASTER}/_cluster/settings" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "transient" :{
+        "cluster.routing.allocation.enable" : null
+     }
+  }'
+}
+
+function _es-index-settings--routing() {
+  if [[ -z "$1" ]]; then
+    index_pattern="_all"
+  else
+    index_pattern=$1
+  fi
+
+  es-curl -X GET "${ES_MASTER}/${index_pattern}/_settings/index.routing.allocation.*?pretty=true"
+}
+
+#es-cluster-settings-put--allocation-exclude-name "p-ingest-elasticsearch-data-4,p-ingest-elasticsearch-data-5,p-ingest-elasticsearch-data-6,p-ingest-elasticsearch-data-7,p-ingest-elasticsearch-data-warm-8,p-ingest-elasticsearch-data-9,p-ingest-elasticsearch-data-10,p-ingest-elasticsearch-data-11,p-ingest-elasticsearch-data-12,p-ingest-elasticsearch-data-13,p-ingest-elasticsearch-data-14,p-ingest-elasticsearch-data-15,p-ingest-elasticsearch-data-16,p-ingest-elasticsearch-data-17,p-ingest-elasticsearch-data-18"
+
+
+function _es-watch-shards {
+  watch -n 300 -x zsh -c "echo shards remaining:; es-cat-shards | grep -E -v 'data-hot-[1-6]$|data-warm-[1-6]$' | wc -l"
+}
+
+
+#for i in $(es-index-settings--routing-tsv  | awk -F' ' '$1 ~ /warm/' | grep '201812$' | awk '{print $3}'); do
+#  es-index-settings-put--allocation-include-node_class $i hot
+#done
+
+#for i in $(es-index-settings 'connect-v3-**' '**' | jq -r 'to_entries[] | select(.value.settings.index | has("routing") | not) | .key'); do
+#  es-index-settings-put--allocation-include-node_class $i warm
+#done
+
+#function never() {
+#  for i in $(es-index-settings--num-replicas-tsv | grep '^2' | grep 201809 | awk '{print $2}'); do
+#    echo es-index-settings-put--num-replicas $i 1
+#  done
+#}
+
+
+

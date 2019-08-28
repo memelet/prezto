@@ -1,0 +1,7 @@
+#!/usr/bin/env zsh
+
+function ls-beat-filters() {
+  env=$1
+  ansible -i inventory/aws/${env} all \
+    -a "sudo /bin/sh -c 'hostname; [ -f /etc/metricbeat/metricbeat.yml ] && (fgrep system.process.cgroup.memory.kmem.limit.bytes.gte /etc/metricbeat/metricbeat.yml || echo \"***** BAD BEAT *****\") || echo \"NO BEAT\"'"
+}
