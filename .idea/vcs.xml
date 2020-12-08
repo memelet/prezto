@@ -8,6 +8,7 @@
     <mapping directory="$PROJECT_DIR$/modules/history-substring-search/external" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/modules/prompt/external/agnoster" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/modules/prompt/external/async" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/modules/prompt/external/powerlevel10k" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/modules/prompt/external/powerlevel9k" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/modules/prompt/external/powerlevel9k/shunit2" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/modules/prompt/external/powerline" vcs="Git" />

@@ -24,3 +24,6 @@ if [[ -o INTERACTIVE && -t 2 ]]; then
   fi
 
 fi >&2
+
+# Clear ~/.ansible/tmp
+rm -rf ~/.ansbile/tmp/*

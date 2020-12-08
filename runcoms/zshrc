@@ -1,5 +1,10 @@
 #!/bin/zsh
 
+# Source Prezto.
+if [[ -s "${ZDOTDIR:-$HOME}/.zprezto/init.zsh" ]]; then
+  source "${ZDOTDIR:-$HOME}/.zprezto/init.zsh"
+fi
+
 #---- base
 
 export CURRENT_OS=$(uname)
@@ -10,83 +15,35 @@ ulimit -n 1000
 
 alias zshrc='source ~/.zshrc'
 alias zshenv='source ~/.zshenv'
+alias zprofile='source ~/.zprofile'
 
-#---- plugins
+alias watch='watch '
+alias w='watch '
 
-autoload -U compinit; compinit
-
-# Source Prezto.
-if [[ -s "${ZDOTDIR:-$HOME}/.zprezto/init.zsh" ]]; then
-  source "${ZDOTDIR:-$HOME}/.zprezto/init.zsh"
-fi
-
-# autojump
-#setopt auto_cd
-#setopt extended_glob
-# [[ -s ~/.autojump/etc/profile.d/autojump.zsh ]] && source ~/.autojump/etc/profile.d/autojump.zsh
-# setopt nolistambiguous
-
-# - - -
-
-# https://busy.org/@demwunz/how-to-get-a-customised-and-pretty-zsh-terminal-on-mac-osx
-
-#---- zsh global alias expansion
 # ref: http://blog.patshead.com/2012/11/automatically-expaning-zsh-global-aliases---simplified.html
-
 globalias() {
    if [[ $LBUFFER =~ '[A-Z0-9]+$' ]]; then
      zle _expand_alias
    fi
    zle self-insert
 }
-
 zle -N globalias
 
-bindkey " " globalias
-bindkey "^ " magic-space
+#bindkey "^ " globalias
+#bindkey "^ " magic-space
 bindkey -M isearch " " magic-space
 
-function loadenv() { export $(grep -v '^#' .env | xargs) }
+#autoload -U compinit; compinit
+autoload -U +X compinit && compinit
 
-alias w='watch -x zsh -c'
+# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
+[[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
 
-#---- ---- ----
-
-#---- git
-
-alias git-list-merged="git branch -r --merged | grep -v master | sed 's/origin\///'"
-alias git-delete-merged="git branch -r --merged | grep -v master | sed 's/origin\///' | xargs -n 1 git push --delete origin"
-
-#---- dev
-
-# export TOOLS=$HOME/tools
-
-export LC_ALL="en_US.UTF-8"
-export LANG="en_US.UTF-8"
-
-#---- python
-
-#export PATH=~/.local/bin:$PATH
-
-#---- go
-
-# export PATH=/usr/local/go/bin:$PATH
-
-#---- node
-
-# installed in .zsh/completion: https://github.com/felixr/docker-zsh-completion
-
-#export PATH=./node_modules/.bin:$PATH:$HOME/.npm/bin
-
-export NVM_DIR="/Users/bkaplan/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"  # This loads nvm
-
-export NVM_SYMLINK_CURRENT=true
-
-export CPPFLAGS=-I/usr/local/opt/openssl/include
-export LDFLAGS=-L/usr/local/opt/openssl/lib
+alias df='df -h -x"squashfs"'
 
 #---- iterm
+
+#source ~/.iterm2_shell_integration.zsh
 
 # https://coderwall.com/p/a8uxma/zsh-iterm2-osx-shortcuts
 # ⌘ + ← or → - move one word backward/forward
@@ -96,34 +53,102 @@ bindkey "^[e" forward-word
 # Other shortcuts
 # - http://www.geekmind.net/2011/01/shortcuts-to-improve-your-bash-zsh.html
 
-#---- ubuntu
+#---- ssh
 
-#~/.solarized/gnome-terminal-colors-solarized/set_light.sh
-#~/.solarized/gnome-terminal-colors-solarized/set_dark.sh
+if [[ ${CURRENT_OS} == "Darwin" ]]; then
+  SSHPID=`ps ax|grep -c "[s]sh-agent"`
+  if (( $SSHPID == 0 )); then
+    rm -f $HOME/.ssh-env
+    ssh-agent > $HOME/.ssh-env
+    source $HOME/.ssh-env
+    ssh-add $HOME/.ssh/hoth_dsa
+  else
+    source $HOME/.ssh-env
+  fi
+fi
 
-#---- java
-
-#if [[ ${CURRENT_OS} == "Linux" ]]; then
-#  export JAVA_HOME=/usr/lib/jvm/java-7-oracle
-#  alias idea=${TOOLS}/idea/current/bin/idea.sh
-#elif [[ ${CURRENT_OS} == "Darwin" ]]; then
-#  export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home
-#fi
+# $1 host
+# $2 tmux_name?
 #
-#alias yourkit=${TOOLS}/yourkit/yjp
+function rtmux {
+  case "$2" in
+	"") autossh -M 0 $1 -t "if tmux -qu has;       then tmux -qu attach;       else EDITOR=vim tmux -qu new;   fi";;
+	*)  autossh -M 0 $1 -t "if tmux -qu has -t $2; then tmux -qu attach -t $2; else EDITOR=vim tmux new -s $2; fi";;
+  esac
+}
 
-#---- groovy
+#---- git
 
-export GROOVY_HOME=/usr/local/opt/groovy/libexec
+alias git-list-merged="git branch -r --merged | grep -v master | sed 's/origin\///'"
+alias git-delete-merged="git branch -r --merged | grep -v master | sed 's/origin\///' | xargs -n 1 git push --delete origin"
 
-#---- k8
+#---- dev
 
-alias k='kubectl'
-alias kg='kubectl get'
-alias kl='kubectl logs '
-alias kx='kubectl exec -i -t'
-alias kc='kubectx'
-alias kgall='kubectl get all'
+export LC_ALL="en_US.UTF-8"
+export LANG="en_US.UTF-8"
+
+#---- yq
+
+if [ $commands[yq] ]; then
+  source <(yq shell-completion --variation=zsh)
+fi
+
+#---- vagrant
+
+alias v='vagrant'
+alias vs='vagrant status'
+alias vu='vagrant up --provision'
+alias vd='vagrant destroy -f'
+
+#---- python
+
+
+#---- go
+
+export PATH=$PATH:/usr/local/go/bin
+
+#---- node
+
+export NVM_DIR="/home/bkaplan/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"  # This loads nvm
+
+export NVM_SYMLINK_CURRENT=true
+
+export CPPFLAGS=-I/usr/local/opt/openssl/include
+export LDFLAGS=-L/usr/local/opt/openssl/lib
+
+function vi-npm-check {
+  if [[ -f .ncurc.json ]]; then
+    ignores=($(cat .ncurc.json | jq -r '.reject | map("--ignore "+.) | join(" ")'))
+  else
+    ignores=""
+  fi
+  npm-check --update-all --save-exact --no-emoji --skip-unused "${ignores[@]}"
+}
+
+function vi-npm-check-ro {
+  if [[ -f .ncurc.json ]]; then
+    ignores=($(cat .ncurc.json | jq -r '.reject | map("--ignore "+.) | join(" ")'))
+  else
+    ignores=""
+  fi
+  npm-check --no-emoji --skip-unused "${ignores[@]}"
+}
+
+function vi-npm-audit {
+  npm audit fix --registry=https://registry.npmjs.org
+}
+
+#---- idea
+
+alias idea=/snap/bin/intellij-idea-ultimate
+
+#---- k8s
+
+#[[ -f ~/.kubectl_aliases ]] && source ~/.kubectl_aliases
+
+alias k=kubectl
+alias kz=kustomize
 alias h=helm
 
 function k-dashboard-token {
@@ -135,17 +160,32 @@ if [ $commands[kubectl] ]; then
   source <(helm completion zsh)
 fi
 
-export HELM_HOST=localhost:44134
-export TILLER_NAMESPACE=tiller
+if [ $commands[k3d] ]; then
+  source <(k3d completion zsh)
+fi
 
-function tiller-local {
-  echo "Starting tiller for kubectl context: $(kubectl config current-context)"
-  tiller -listen=${HELM_HOST} -storage=secret -logtostderr
-}
+export PATH="${KREW_ROOT:-$PATH:$HOME/.krew}/bin"
 
-export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
+alias k9s='docker run --rm -it -v $KUBECONFIG:/root/.kube/config quay.io/derailed/k9s'
+
+# https://github.com/ahmetb/kubectl-aliases
+#[ -f ~/.kubectl_aliases ] && source ~/.kubectl_aliases
 
 #---- docker
+
+function docker-ps {
+  docker ps --format="table {{.Names}}\t{{.Status}}\t{{.Ports}}\t{{.Networks}}"
+}
+function watch-docker-ps {
+  watch 'docker ps --format="table {{.Names}}\t{{.Status}}\t{{.Ports}}\t{{.Networks}}"'
+}
+
+function docker-rm-all () {
+	docker stop $(docker ps -a -q)
+	docker rm $(docker ps -a -q)
+	docker network prune -f
+	docker volume prune -f
+}
 
 function docker-get-ip {
   [ -n $1 ] && docker inspect --format "{{ .NetworkSettings.IPAddress }}" $1
@@ -187,47 +227,19 @@ function docker-volume-cleanup {
   docker run -v /var/run/docker.sock:/var/run/docker.sock -v /var/lib/docker:/var/lib/docker --rm martin/docker-cleanup-volumes
 }
 
-#---- ssh
-
-if [[ ${CURRENT_OS} == "Darwin" ]]; then
-  SSHPID=`ps ax|grep -c "[s]sh-agent"`
-  if (( $SSHPID == 0 )); then
-    rm -f $HOME/.ssh-env
-    ssh-agent > $HOME/.ssh-env
-    source $HOME/.ssh-env
-    ssh-add $HOME/.ssh/hoth_dsa
-  else
-    source $HOME/.ssh-env
-  fi
-fi
-
-source $HOME/bin/tmuxinator-completion.zsh
-
-# $1 host
-# $2 tmux_name?
-#
-function rtmux {
-  case "$2" in
-	"") autossh -M 0 $1 -t "if tmux -qu has;       then tmux -qu attach;       else EDITOR=vim tmux -qu new;   fi";;
-	*)  autossh -M 0 $1 -t "if tmux -qu has -t $2; then tmux -qu attach -t $2; else EDITOR=vim tmux new -s $2; fi";;
-  esac
-}
-
 #---- aws/ec2
 
 source $HOME/.aws/env.zsh
 #source /usr/local/bin/aws_zsh_completer.sh
 
 #---- network commands
-# sudo netstat -ntlp | grep LISTEN
+
+# alias net-ports='sudo netstat -ntlp | grep LISTEN'
 
 #---- ansible
 
 ansible-venv-27() { source ~/.venv/ansible-2.7/bin/activate }
 ansible-venv-28() { source ~/.venv/ansible-2.8/bin/activate }
-
-#export PYTHONPATH=/Users/bkaplan/si/ansible/lib:/usr/local/lib/python2.7/site-packages
-#export PYTHONPATH=/usr/local/lib/python2.7/site-packages
 
 export ANSIBLE_VAULT_PASSWORD_FILE=$HOME/.ansible/vault-password
 export ANSIBLE_HOST_KEY_CHECKING=False
@@ -235,7 +247,7 @@ export ANSIBLE_SSH_ARGS
 export PYTHONHTTPSVERIFY=0
 
 ansible-refresh-inventory() { ./inventory/aws/$@/ec2.py --refresh-cache }
-ansible-requirements() { ansible-galaxy install --ignore-errors -r requirements.yml }
+ansible-requirements() { ansible-galaxy install --ignore-errors -r requirements.y*ml }
 
 # for https://github.com/ansible/ansible/issues/31869#issuecomment-337769174, https://github.com/jhaals/ansible-vault/issues/60
 export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
@@ -278,9 +290,7 @@ alias -g cA='-a "/bin/bash -c ''''"'
 
 # see ~/.zprezto/runcoms/zshenv
 
-#---- ---- ----
-
-# uri encoding, from https://stackoverflow.com/a/10660730/3549299
+#---- uri encoding, from https://stackoverflow.com/a/10660730/3549299
 
 urlencode() {
   local string="${1}"
@@ -304,4 +314,16 @@ urldecode() {
   printf -v REPLY '%b' "${1//%/\\x}" # You can either set a return variable (FASTER)
   echo "${REPLY}"  #+or echo the result (EASIER)... or both... :p
 }
+
+#==== auto environments
+
+source ~/dotfiles/zsh-autoenv/autoenv.zsh
+
+#eval "$(direnv hook zsh)"
+
+#export PYENV_ROOT="$HOME/.pyenv"
+#export PATH="$PYENV_ROOT/bin:$PATH"
+#eval "$(pyenv init -)"
+
+#[[ -f ~/.auto-venv ]] && source ~/.auto-venv
 
